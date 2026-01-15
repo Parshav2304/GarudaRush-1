@@ -37,3 +37,6 @@ pytest-cov
 black
 
 flake8
+
+# Streamlit app
+streamlit
