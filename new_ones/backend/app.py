@@ -44,7 +44,7 @@ jwt = JWTManager(app)
 
 # Global mongo client / db holders
 mongo_client = None
- db = None
+db = None
 
 def try_connect():
     """
@@ -188,7 +188,7 @@ if __name__ == '__main__':
     ║  Debug: {debug}                         ║
     ║  MongoDB: {status:12}              ║
     ╚═══════════════════════════════════════╝
-    """)
+    """
+    )
     
     app.run(host='0.0.0.0', port=port, debug=debug)
-        
