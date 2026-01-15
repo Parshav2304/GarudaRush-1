@@ -25,7 +25,7 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-chang
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 24)))
 # Default MONGO_URI should not include DB name (db name comes from MONGO_DB_NAME)
 app.config['MONGO_URI'] = os.getenv('MONGO_URI', 'mongodb://localhost:27017')
-app.config['MONGO_DB_NAME'] = os.getenv('MONGO_DB_NAME', 'garudarush')
+app.config['MONGO_DB_NAME'] = os.getenv('MONGO_DB_NAME', 'GarudaRush')
 
 # Reconnect interval (seconds)
 RECONNECT_INTERVAL = int(os.getenv('MONGO_RECONNECT_INTERVAL', 5))
