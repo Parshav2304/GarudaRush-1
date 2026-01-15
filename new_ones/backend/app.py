@@ -1,50 +1,21 @@
-"""
-GarudaRush Backend Application
-Main Flask application entry point with authentication and traffic monitoring
-"""
+import os
+import time
+import traceback
+import threading
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from pymongo import MongoClient
 from datetime import timedelta
-import os
 from dotenv import load_dotenv
-import threading
-import time
-import traceback
 
-# Load environment variables
+# Load environment variables FIRST
 load_dotenv()
 
-# Initialize Flask app
-app = Flask(__name__)
-
-# Configuration
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-change-this')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 24)))
-# Default MONGO_URI should not include DB name (db name comes from MONGO_DB_NAME)
-app.config['MONGO_URI'] = os.getenv('MONGO_URI', 'mongodb://localhost:27017')
-app.config['MONGO_DB_NAME'] = os.getenv('MONGO_DB_NAME', 'GarudaRush')
-
-# Reconnect interval (seconds)
-RECONNECT_INTERVAL = int(os.getenv('MONGO_RECONNECT_INTERVAL', 5))
-
-# Enable CORS
-CORS(app, resources={
-    r"/api/*": {
-        "origins": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
-
-# Initialize JWT
-jwt = JWTManager(app)
-
-# Global mongo client / db holders
+# Global MongoDB variables
 mongo_client = None
 db = None
+RECONNECT_INTERVAL = 10  # seconds
 
 def try_connect():
     """
@@ -110,20 +81,35 @@ def monitor_mongo():
         # Sleep before next check/attempt
         time.sleep(RECONNECT_INTERVAL)
 
-# Start the monitor thread (daemon so it won't block process exit)
+# Initialize Flask app
+app = Flask(__name__)
+
+# Configuration
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-change-this')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 24)))
+app.config['MONGO_URI'] = os.getenv('MONGO_URI', 'mongodb://localhost:27017/GarudaRush')
+app.config['MONGO_DB_NAME'] = os.getenv('MONGODBNAME', 'GarudaRush')
+
+# Enable CORS
+CORS(app, 
+     resources={r"/*": {"origins": os.getenv('FRONTEND_URL', 'http://localhost:3000'), 
+                       "methods": ["GET", "POST", "PUT", "DELETE"],
+                       "allow_headers": ["Content-Type", "Authorization"]}})
+
+# Initialize JWT
+jwt = JWTManager(app)
+
+# Start MongoDB monitor thread (NON-BLOCKING)
 monitor_thread = threading.Thread(target=monitor_mongo, daemon=True)
 monitor_thread.start()
 
-# Make db available to routes (may be None initially; monitor_mongo updates it)
-app.config['DB'] = db
-
-# Import routes (these will access app.config['DB'] when they run)
+# Import and register routes AFTER app config
 from routes.auth import auth_bp
 from routes.traffic import traffic_bp
 from routes.dashboard import dashboard_bp
 from routes.alerts import alerts_bp
 
-# Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(traffic_bp, url_prefix='/api/traffic')
 app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
@@ -131,64 +117,62 @@ app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
 
 # Error handlers
 @app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Resource not found'}), 404
+def not_found_error(error):
+    return jsonify({"error": "Resource not found"}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
+    return jsonify({"error": "Internal server error"}), 500
 
+# JWT error handlers
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
-    return jsonify({'error': 'Token has expired', 'message': 'Please login again'}), 401
+    return jsonify({"error": "Token has expired", "message": "Please login again"}), 401
 
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
-    return jsonify({'error': 'Invalid token', 'message': 'Token verification failed'}), 401
+    return jsonify({"error": "Invalid token", "message": "Token verification failed"}), 401
 
 @jwt.unauthorized_loader
 def missing_token_callback(error):
-    return jsonify({'error': 'Authorization required', 'message': 'Request does not contain an access token'}), 401
+    return jsonify({"error": "Authorization required", "message": "Request does not contain an access token"}), 401
 
 # Health check endpoint
 @app.route('/api/health', methods=['GET'])
 def health_check():
+    db_status = "connected" if app.config.get('DB') is not None else "disconnected"
     return jsonify({
-        'status': 'healthy',
-        'service': 'GarudaRush API',
-        'version': '1.0.0',
-        'database': 'connected' if app.config.get('DB') is not None else 'disconnected'
+        "status": "healthy", 
+        "service": "GarudaRush API", 
+        "version": "1.0.0", 
+        "database": db_status
     }), 200
 
 # Root endpoint
 @app.route('/')
 def index():
     return jsonify({
-        'message': 'GarudaRush API',
-        'version': '1.0.0',
-        'endpoints': {
-            'auth': '/api/auth',
-            'traffic': '/api/traffic',
-            'dashboard': '/api/dashboard',
-            'alerts': '/api/alerts',
-            'health': '/api/health'
+        "message": "GarudaRush API", 
+        "version": "1.0.0",
+        "endpoints": {
+            "auth": "/api/auth",
+            "traffic": "/api/traffic", 
+            "dashboard": "/api/dashboard",
+            "alerts": "/api/alerts",
+            "health": "/api/health"
         }
     }), 200
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV', 'production') == 'development'
-    status = 'Connected' if app.config.get('DB') else 'Disconnected'
-    
     print(f"""
     ╔═══════════════════════════════════════╗
     ║     🦅 GarudaRush Backend Started     ║
     ║                                       ║
     ║  Port: {port}                            ║
     ║  Debug: {debug}                         ║
-    ║  MongoDB: {status:12}              ║
+    ║  MongoDB: {'Connected' if db else 'Disconnected'}              ║
     ╚═══════════════════════════════════════╝
-    """
-    )
-    
+    """)
     app.run(host='0.0.0.0', port=port, debug=debug)
