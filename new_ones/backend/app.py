@@ -178,8 +178,8 @@
 #     app.run(host='0.0.0.0', port=port, debug=debug)
 
 """
-GarudaRush Backend Application - DEMO MODE (No MongoDB Required)
-This version uses in-memory storage for demonstration purposes
+GarudaRush Backend - Platform-Compatible Version
+Works on Streamlit Cloud, Heroku, Railway, etc.
 """
 
 from flask import Flask, jsonify, request
@@ -188,252 +188,179 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
-from dotenv import load_dotenv
 import uuid
 
-# Load environment variables
-load_dotenv()
-
-# Initialize Flask app
+# Initialize Flask
 app = Flask(__name__)
 
-# Configuration
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'demo-secret-key-12345')
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'demo-jwt-secret-12345')
+# Config
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'demo-secret-12345')
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'demo-jwt-12345')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
-# Enable CORS
+# CORS - allow all origins for demo
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Initialize JWT
+# JWT
 jwt = JWTManager(app)
 
-# IN-MEMORY DATABASE (for demo purposes)
-USERS_DB = {}
-TRAFFIC_DB = []
-ALERTS_DB = []
+# ===== IN-MEMORY STORAGE =====
+USERS = {}
+TRAFFIC = []
+ALERTS = []
 
-print("🎯 Running in DEMO MODE - No MongoDB required!")
-print("📦 Using in-memory storage (data will reset on restart)")
-
-# ==================== AUTH ROUTES ====================
+# ===== AUTH ENDPOINTS =====
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    """Register a new user"""
     try:
         data = request.get_json()
-        email = data.get('email', '').lower().strip()
+        email = data.get('email', '').lower()
         password = data.get('password', '')
-        full_name = data.get('full_name', '').strip()
+        full_name = data.get('full_name', '')
         
-        if not email or not password or not full_name:
-            return jsonify({'error': 'All fields are required'}), 400
+        if not all([email, password, full_name]):
+            return jsonify({'error': 'All fields required'}), 400
         
-        if email in USERS_DB:
-            return jsonify({'error': 'User already exists'}), 409
+        if email in USERS:
+            return jsonify({'error': 'User exists'}), 409
         
-        # Create user
         user_id = str(uuid.uuid4())
-        USERS_DB[email] = {
+        USERS[email] = {
             'id': user_id,
             'email': email,
             'password': generate_password_hash(password),
             'full_name': full_name,
-            'role': 'user',
-            'created_at': datetime.utcnow().isoformat()
+            'role': 'user'
         }
         
-        # Create token
-        access_token = create_access_token(identity=user_id)
+        token = create_access_token(identity=user_id)
         
         return jsonify({
-            'message': 'User registered successfully',
-            'user': {
-                'id': user_id,
-                'email': email,
-                'full_name': full_name,
-                'role': 'user'
-            },
-            'access_token': access_token
+            'message': 'Registered successfully',
+            'user': {'id': user_id, 'email': email, 'full_name': full_name, 'role': 'user'},
+            'access_token': token
         }), 201
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    """Login user"""
     try:
         data = request.get_json()
-        email = data.get('email', '').lower().strip()
+        email = data.get('email', '').lower()
         password = data.get('password', '')
         
-        if not email or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
-        
-        user = USERS_DB.get(email)
-        
+        user = USERS.get(email)
         if not user or not check_password_hash(user['password'], password):
-            return jsonify({'error': 'Invalid email or password'}), 401
+            return jsonify({'error': 'Invalid credentials'}), 401
         
-        access_token = create_access_token(identity=user['id'])
+        token = create_access_token(identity=user['id'])
         
         return jsonify({
             'message': 'Login successful',
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'full_name': user['full_name'],
-                'role': user['role']
-            },
-            'access_token': access_token
+            'user': {'id': user['id'], 'email': user['email'], 'full_name': user['full_name'], 'role': user['role']},
+            'access_token': token
         }), 200
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/me', methods=['GET'])
 @jwt_required()
-def get_current_user():
-    """Get current user"""
+def get_me():
     try:
         user_id = get_jwt_identity()
-        
-        for user in USERS_DB.values():
+        for user in USERS.values():
             if user['id'] == user_id:
-                return jsonify({
-                    'user': {
-                        'id': user['id'],
-                        'email': user['email'],
-                        'full_name': user['full_name'],
-                        'role': user['role']
-                    }
-                }), 200
-        
+                return jsonify({'user': {'id': user['id'], 'email': user['email'], 'full_name': user['full_name'], 'role': user['role']}}), 200
         return jsonify({'error': 'User not found'}), 404
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ==================== TRAFFIC ROUTES ====================
+# ===== TRAFFIC ENDPOINTS =====
 
 @app.route('/api/traffic/submit', methods=['POST'])
 @jwt_required()
 def submit_traffic():
-    """Submit traffic data"""
     try:
         data = request.get_json()
-        
-        traffic_entry = {
+        entry = {
             'id': str(uuid.uuid4()),
-            'agent_id': data.get('agent_id', 'demo-agent'),
+            'agent_id': data.get('agent_id', 'demo'),
             'packet_count': data.get('packet_count', 0),
-            'byte_count': data.get('byte_count', 0),
             'packet_rate': data.get('packet_rate', 0),
             'protocol': data.get('protocol', 'TCP'),
             'is_suspicious': data.get('is_suspicious', False),
-            'ml_confidence': data.get('ml_confidence', 0.0),
             'timestamp': datetime.utcnow().isoformat()
         }
+        TRAFFIC.append(entry)
         
-        TRAFFIC_DB.append(traffic_entry)
+        if len(TRAFFIC) > 1000:
+            TRAFFIC.pop(0)
         
-        # Keep only last 1000 entries
-        if len(TRAFFIC_DB) > 1000:
-            TRAFFIC_DB.pop(0)
-        
-        # Create alert if suspicious
-        if traffic_entry['is_suspicious']:
-            alert = {
+        if entry['is_suspicious']:
+            ALERTS.append({
                 'id': str(uuid.uuid4()),
-                'attack_type': 'DDoS Attack',
+                'attack_type': 'DDoS',
                 'severity': 'high',
-                'status': 'active',
-                'confidence': traffic_entry['ml_confidence'],
-                'packet_count': traffic_entry['packet_count'],
                 'timestamp': datetime.utcnow().isoformat()
-            }
-            ALERTS_DB.append(alert)
+            })
         
-        return jsonify({'message': 'Traffic data submitted', 'id': traffic_entry['id']}), 201
-        
+        return jsonify({'message': 'Submitted', 'id': entry['id']}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/traffic/live', methods=['GET'])
 @jwt_required()
-def get_live_traffic():
-    """Get live traffic data"""
+def get_live():
     try:
         limit = int(request.args.get('limit', 20))
-        
-        recent_traffic = TRAFFIC_DB[-limit:] if TRAFFIC_DB else []
+        recent = TRAFFIC[-limit:] if TRAFFIC else []
         
         normal = []
         suspicious = []
         
-        for t in recent_traffic:
-            timestamp = t.get('timestamp', '')
-            time_str = timestamp.split('T')[1][:8] if 'T' in timestamp else '00:00:00'
-            
-            point = {
-                'time': time_str,
-                'value': t.get('packet_rate', 0)
-            }
+        for t in recent:
+            time_str = t['timestamp'].split('T')[1][:8] if 'T' in t['timestamp'] else '00:00:00'
+            point = {'time': time_str, 'value': t.get('packet_rate', 0)}
             
             if t.get('is_suspicious'):
                 suspicious.append(point)
             else:
                 normal.append(point)
         
-        return jsonify({
-            'normal': normal,
-            'suspicious': suspicious,
-            'timestamp': datetime.utcnow().isoformat()
-        }), 200
-        
+        return jsonify({'normal': normal, 'suspicious': suspicious, 'timestamp': datetime.utcnow().isoformat()}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/traffic/stats', methods=['GET'])
 @jwt_required()
-def get_traffic_stats():
-    """Get traffic statistics"""
+def get_stats():
     try:
-        total_packets = sum(t.get('packet_count', 0) for t in TRAFFIC_DB)
-        total_bytes = sum(t.get('byte_count', 0) for t in TRAFFIC_DB)
-        
         return jsonify({
             'stats': {
-                'total_packets': total_packets,
-                'total_bytes': total_bytes,
-                'recent_attacks': len([a for a in ALERTS_DB if a.get('status') == 'active'])
+                'total_packets': sum(t.get('packet_count', 0) for t in TRAFFIC),
+                'recent_attacks': len([a for a in ALERTS if 'active' in str(a)])
             }
         }), 200
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ==================== DASHBOARD ROUTES ====================
+# ===== DASHBOARD ENDPOINTS =====
 
 @app.route('/api/dashboard/overview', methods=['GET'])
 @jwt_required()
-def get_dashboard_overview():
-    """Get dashboard overview"""
+def get_overview():
     try:
-        total_detections = len(ALERTS_DB)
-        attack_rate = (total_detections / len(TRAFFIC_DB) * 100) if TRAFFIC_DB else 0
-        
         return jsonify({
             'overview': {
-                'total_records': len(TRAFFIC_DB) + len(ALERTS_DB),
-                'traffic_records': len(TRAFFIC_DB),
-                'alert_records': len(ALERTS_DB)
+                'total_records': len(TRAFFIC) + len(ALERTS),
+                'traffic_records': len(TRAFFIC),
+                'alert_records': len(ALERTS)
             },
             'detection_stats': {
-                'total_detections': total_detections,
-                'attack_rate': round(attack_rate, 2),
+                'total_detections': len(ALERTS),
+                'attack_rate': round((len(ALERTS) / len(TRAFFIC) * 100) if TRAFFIC else 0, 2),
                 'false_positive_rate': 2.5,
                 'avg_detection_time': 3.2
             },
@@ -457,100 +384,79 @@ def get_dashboard_overview():
                 'last_updated': datetime.utcnow().isoformat()
             }
         }), 200
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ==================== ALERTS ROUTES ====================
+# ===== ALERTS ENDPOINTS =====
 
 @app.route('/api/alerts/', methods=['GET'])
 @jwt_required()
 def get_alerts():
-    """Get alerts"""
     try:
         limit = int(request.args.get('limit', 50))
-        recent_alerts = ALERTS_DB[-limit:] if ALERTS_DB else []
-        
         return jsonify({
-            'alerts': recent_alerts,
-            'pagination': {
-                'total': len(ALERTS_DB),
-                'page': 1,
-                'limit': limit,
-                'total_pages': 1
-            }
+            'alerts': ALERTS[-limit:] if ALERTS else [],
+            'pagination': {'total': len(ALERTS), 'page': 1, 'limit': limit}
         }), 200
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/alerts/summary', methods=['GET'])
 @jwt_required()
-def get_alerts_summary():
-    """Get alerts summary"""
+def get_alert_summary():
     try:
         return jsonify({
             'summary': {
-                'by_severity': {
-                    'low': 5,
-                    'medium': 10,
-                    'high': 15,
-                    'critical': 8
-                },
-                'by_status': {
-                    'active': len([a for a in ALERTS_DB if a.get('status') == 'active']),
-                    'acknowledged': 0,
-                    'resolved': 0
-                },
-                'total': len(ALERTS_DB)
+                'by_severity': {'low': 5, 'medium': 10, 'high': 15, 'critical': 8},
+                'by_status': {'active': len(ALERTS), 'acknowledged': 0, 'resolved': 0},
+                'total': len(ALERTS)
             }
         }), 200
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ==================== ERROR HANDLERS ====================
+# ===== ERROR HANDLERS =====
 
 @app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Resource not found'}), 404
+def not_found(e):
+    return jsonify({'error': 'Not found'}), 404
 
 @app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
+def server_error(e):
+    return jsonify({'error': 'Server error'}), 500
 
 @jwt.expired_token_loader
-def expired_token_callback(jwt_header, jwt_payload):
-    return jsonify({'error': 'Token has expired'}), 401
+def expired(a, b):
+    return jsonify({'error': 'Token expired'}), 401
 
 @jwt.invalid_token_loader
-def invalid_token_callback(error):
+def invalid(e):
     return jsonify({'error': 'Invalid token'}), 401
 
 @jwt.unauthorized_loader
-def missing_token_callback(error):
-    return jsonify({'error': 'Authorization required'}), 401
+def unauth(e):
+    return jsonify({'error': 'No token'}), 401
 
-# ==================== HEALTH & ROOT ====================
+# ===== HEALTH & ROOT =====
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
+@app.route('/api/health')
+def health():
     return jsonify({
         'status': 'healthy',
-        'service': 'GarudaRush API (Demo Mode)',
+        'service': 'GarudaRush DEMO',
         'version': '1.0.0-demo',
         'database': 'in-memory',
-        'users': len(USERS_DB),
-        'traffic_records': len(TRAFFIC_DB),
-        'alerts': len(ALERTS_DB)
+        'users': len(USERS),
+        'traffic': len(TRAFFIC),
+        'alerts': len(ALERTS)
     }), 200
 
 @app.route('/')
-def index():
+def root():
     return jsonify({
-        'message': 'GarudaRush API - Demo Mode',
+        'message': 'GarudaRush Demo API',
         'version': '1.0.0-demo',
-        'mode': 'In-Memory Storage (No MongoDB required)',
+        'mode': 'No MongoDB Required',
         'endpoints': {
             'auth': '/api/auth',
             'traffic': '/api/traffic',
@@ -560,24 +466,10 @@ def index():
         }
     }), 200
 
+# For WSGI servers (Gunicorn, Streamlit, etc.)
+application = app
+
+# Only run directly if not on a platform
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_ENV', 'production') == 'development'
-    
-    print(f"""
-    ╔═══════════════════════════════════════╗
-    ║   🦅 GarudaRush Backend - DEMO MODE   ║
-    ║                                       ║
-    ║  Port: {port}                            ║
-    ║  Mode: In-Memory Storage              ║
-    ║  MongoDB: Not Required ✅              ║
-    ╚═══════════════════════════════════════╝
-    
-    ✅ No database setup needed!
-    ✅ Perfect for demos and presentations
-    ✅ Data resets on restart
-    
-    Ready to accept connections!
-    """)
-    
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
