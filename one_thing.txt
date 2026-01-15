@@ -1,0 +1,37 @@
+garudarush-project/
+├── backend/
+│   ├── app.py                    # Main Flask application
+│   ├── agent.py                  # Network monitoring agent
+│   ├── requirements.txt          # Python dependencies
+│   ├── .env.example             # Environment template
+│   ├── routes/
+│   │   ├── auth.py              # Authentication endpoints
+│   │   ├── traffic.py           # Traffic monitoring endpoints
+│   │   ├── dashboard.py         # Dashboard data endpoints
+│   │   └── alerts.py            # Alert management endpoints
+│   └── services/
+│       └── ml_detector.py       # ML detection service
+├── frontend/
+│   ├── package.json             # Node dependencies
+│   ├── .env.example            # Environment template
+│   ├── public/
+│   │   └── index.html          # HTML template
+│   └── src/
+│       ├── App.js              # Main React component
+│       ├── index.js            # React entry point
+│       ├── index.css           # Global styles
+│       ├── components/
+│       │   ├── Auth/
+│       │   │   ├── Login.jsx
+│       │   │   ├── Register.jsx
+│       │   │   └── Auth.css
+│       │   └── Dashboard/
+│       │       ├── Dashboard.jsx
+│       │       └── Dashboard.css
+│       └── services/
+│           └── api.js          # API service layer
+├── docs/
+│   └── DEPLOYMENT.md           # Deployment guide
+├── README.md                   # Main documentation
+├── QUICKSTART.md              # Quick setup guide
+└── .gitignore                 # Git ignore rules
