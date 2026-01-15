@@ -189,5 +189,6 @@ if __name__ == '__main__':
     ║  MongoDB: {status:12}              ║
     ╚═══════════════════════════════════════╝
     """
+    )
     
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=port, debug=debug
